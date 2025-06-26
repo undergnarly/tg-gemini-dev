@@ -15,6 +15,15 @@ app = FastAPI(
 class HealthCheck(BaseModel):
     status: str = "ok"
 
+class Task(BaseModel):
+    user_id: int
+    text: str
+    
+class TaskReceipt(BaseModel):
+    task_id: str
+    status: str = "received"
+    message: str
+
 @app.get("/", tags=["Health Check"])
 def health_check() -> HealthCheck:
     """
@@ -23,6 +32,19 @@ def health_check() -> HealthCheck:
     """
     logger.info("Health check endpoint was called.")
     return HealthCheck(status="ok")
+
+@app.post("/tasks/", tags=["Tasks"], status_code=202)
+def receive_task(task: Task) -> TaskReceipt:
+    """
+    Принимает задачу от Telegram-бота.
+    """
+    logger.info(f"Received task from user {task.user_id}: '{task.text}'")
+    # Здесь будет логика передачи задачи в очередь (worker'у)
+    task_id = "temp_task_id_123" # Временный ID
+    return TaskReceipt(
+        task_id=task_id,
+        message=f"Task '{task.text}' received and is being processed."
+    )
 
 @app.on_event("startup")
 async def startup_event():

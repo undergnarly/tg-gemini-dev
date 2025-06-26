@@ -21,8 +21,8 @@ lint:
 	poetry run mypy .
 
 test:
-	@echo "Running tests..."
-	poetry run pytest
+	@echo "Running tests with coverage..."
+	poetry run pytest --cov=services --cov-report=term-missing --cov-report=html
 
 run-api:
 	@echo "Starting API Gateway..."

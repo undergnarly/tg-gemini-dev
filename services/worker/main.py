@@ -83,15 +83,21 @@ def run_crew(text_input: str) -> str:
     Initializes and runs the Crew to process the given text.
     Returns the result from the crew's execution.
     """
-    # Проверяем ключ непосредственно перед использованием
     if not os.getenv("OPENAI_API_KEY"):
         raise ValueError("OPENAI_API_KEY is not set. Cannot run the crew.")
 
     logger.info(f"Initializing crew to analyze text: '{text_input[:50]}...'")
     crew = create_crew(text_input)
-    result = crew.kickoff()
-    logger.info("Crew finished processing.")
-    return result
+    
+    try:
+        logger.info("Crew kickoff...")
+        result = crew.kickoff()
+        logger.info("Crew execution finished.")
+        return result
+    except Exception as e:
+        logger.error(f"An error occurred during crew execution: {e}")
+        # Re-raise the exception to be handled by the caller (e.g., API gateway)
+        raise Exception(f"An error occurred during crew execution: {e}")
 
 if __name__ == '__main__':
     sample_text = "The new open-interpreter library is showing great promise for local code execution in AI agent systems."

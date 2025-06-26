@@ -42,3 +42,5 @@ crewai = { extras = ["tools"], version = "^0.134.0" }
 
 [tool.poetry.group.dev.dependencies]
 e2b = "^1.5.2"
+pytest-cov = "^6.2.1"
+pytest-asyncio = "^1.0.0"

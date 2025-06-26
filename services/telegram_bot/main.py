@@ -1,79 +1,66 @@
 import logging
 import os
-from dotenv import load_dotenv
+import httpx
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import httpx
 
-# Load environment variables from .env file
-load_dotenv()
-
-# Configure logging
+# Setup logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-if not TELEGRAM_BOT_TOKEN:
-    raise ValueError("TELEGRAM_BOT_TOKEN is not set in the environment or .env file")
+API_GATEWAY_URL = os.getenv("API_GATEWAY_URL", "http://api_gateway:8000")
 
-API_GATEWAY_URL = os.getenv("API_GATEWAY_URL", "http://localhost:8000")
+# --- Bot Handlers ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sends a message when the command /start is issued."""
-    user = update.effective_user
-    await update.message.reply_html(
-        rf"Привет, {user.mention_html()}! Я готов к работе. Отправь мне задачу.",
-    )
+    """Send a message when the command /start is issued."""
+    await update.message.reply_text("Welcome! I am your autonomous development assistant. Send me a task.")
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sends a message when the command /help is issued."""
-    await update.message.reply_text("Просто отправь мне текстовое сообщение с описанием задачи, и я передам ее команде разработчиков.")
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle regular text messages and forward them to the API gateway."""
+    user_id = update.message.from_user.id
+    text = update.message.text
+    logger.info(f"Received message from user {user_id}: '{text}'")
 
-async def handle_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send the user's task to the API Gateway."""
-    user_id = update.effective_user.id
-    task_text = update.message.text
-    logger.info(f"Received task from user {user_id}: {task_text}")
-    
-    await update.message.reply_text(f"Получил твою задачу: \"{task_text}\". Отправляю ее команде...")
+    task_payload = {
+        "user_id": user_id,
+        "text": text,
+    }
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{API_GATEWAY_URL}/tasks/",
-                json={"user_id": user_id, "text": task_text},
-                timeout=30.0
-            )
-            response.raise_for_status() # Вызовет исключение для кодов 4xx/5xx
-            
-            receipt = response.json()
-            logger.info(f"Task sent successfully. Receipt: {receipt}")
-            await update.message.reply_text(f"Задача принята в работу! ID твоей задачи: `{receipt.get('task_id')}`")
+            response = await client.post(f"{API_GATEWAY_URL}/tasks/", json=task_payload, timeout=30.0)
+            response.raise_for_status() # Will raise an exception for 4xx/5xx responses
+        
+        await update.message.reply_text("✅ Task received! The AI crew is on it. I'll get back to you with the result.")
 
-    except httpx.RequestError as exc:
-        logger.error(f"An error occurred while requesting {exc.request.url!r}: {exc}")
-        await update.message.reply_text("Не удалось связаться с командой разработчиков. Попробуй позже.")
+    except httpx.ConnectError:
+        logger.error("Connection to API gateway failed.")
+        await update.message.reply_text("❌ An error occurred: Could not connect to the API gateway. Please try again later.")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"API gateway returned an error: {e.response.status_code} - {e.response.text}")
+        await update.message.reply_text(f"❌ An error occurred: The API gateway is not responding correctly. (Code: {e.response.status_code})")
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}")
-        await update.message.reply_text("Произошла непредвиденная ошибка. Мы уже разбираемся.")
+        await update.message.reply_text("❌ An unexpected error occurred. Please check the logs.")
+
 
 def main() -> None:
-    """Start the bot."""
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    """Starts the bot."""
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not token:
+        logger.critical("TELEGRAM_BOT_TOKEN is not set. The bot cannot start.")
+        raise ValueError("TELEGRAM_BOT_TOKEN is not set in the environment or .env file")
 
-    # on different commands - answer in Telegram
+    application = Application.builder().token(token).build()
+
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # on non command i.e message - handle the task
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_task))
-
-    logger.info("Telegram Bot is starting...")
-    # Run the bot until the user presses Ctrl-C
+    logger.info("Bot is starting...")
     application.run_polling()
-    logger.info("Telegram Bot has stopped.")
 
 if __name__ == "__main__":
     main() 

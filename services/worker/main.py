@@ -1,3 +1,13 @@
+# This is a workaround for the ChromaDB dependency on a newer version of sqlite3
+# It must be at the very top of the file
+try:
+    __import__("pysqlite3")
+    import sys
+    sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+    print("Successfully replaced sqlite3 with pysqlite3")
+except ImportError:
+    print("pysqlite3 not found, using standard sqlite3")
+
 import os
 import logging
 from crewai import Agent, Task, Crew, Process
@@ -9,10 +19,6 @@ load_dotenv()
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-# Check for OpenAI API key
-if not os.getenv("OPENAI_API_KEY"):
-    raise ValueError("OPENAI_API_KEY is not set in the environment or .env file")
 
 # --- Agent Definitions ---
 
@@ -69,7 +75,7 @@ def create_crew(text_input: str) -> Crew:
       agents=[researcher, writer],
       tasks=[analysis_task, report_task],
       process=Process.sequential,
-      verbose=2
+      verbose=True
     )
 
 def run_crew(text_input: str) -> str:
@@ -77,6 +83,10 @@ def run_crew(text_input: str) -> str:
     Initializes and runs the Crew to process the given text.
     Returns the result from the crew's execution.
     """
+    # Проверяем ключ непосредственно перед использованием
+    if not os.getenv("OPENAI_API_KEY"):
+        raise ValueError("OPENAI_API_KEY is not set. Cannot run the crew.")
+
     logger.info(f"Initializing crew to analyze text: '{text_input[:50]}...'")
     crew = create_crew(text_input)
     result = crew.kickoff()

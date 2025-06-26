@@ -1,6 +1,11 @@
 # syntax=docker/dockerfile:1
 FROM python:3.10-slim
 
+# Install system dependencies required for pysqlite3-binary
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
@@ -16,7 +21,7 @@ RUN pip install poetry
 COPY pyproject.toml poetry.lock ./
 
 # Устанавливаем зависимости
-RUN poetry install --no-dev --no-root
+RUN poetry install --no-dev --no-root && poetry run pip install "pysqlite3-binary==0.5.3.0"
 
 # Копируем исходный код приложения
 COPY . .
